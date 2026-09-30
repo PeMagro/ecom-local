@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { usePresentation } from "@/hooks/usePresentation";
+import { useAnyMarketplaceConnected } from "@/hooks/useMarketplaceConnected";
 import { getOverview } from "@/lib/dashboard.functions";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
 import { CONNECTION_STATUS_LABEL, ORDER_STATUS_LABEL } from "@/lib/marketplaces";
@@ -39,6 +40,7 @@ export const Route = createFileRoute("/_authenticated/visao-geral")({
 function Overview() {
   const { user } = useAuth();
   const presentation = usePresentation();
+  const { connected: marketplaceConnected } = useAnyMarketplaceConnected();
   const userId = user?.id;
   const query = useQuery({
     queryKey: ["overview", userId],
@@ -162,17 +164,31 @@ function Overview() {
           }
         >
           {orders.length === 0 ? (
-            <EmptyState
-              compact
-              icon={ShoppingCart}
-              title="Nenhum pedido sincronizado"
-              description="Os pedidos aparecem aqui assim que um marketplace estiver conectado."
-              action={
-                <Button asChild size="sm">
-                  <Link to="/integracoes">Conectar marketplace</Link>
-                </Button>
-              }
-            />
+            marketplaceConnected ? (
+              <EmptyState
+                compact
+                icon={ShoppingCart}
+                title="Nenhum pedido sincronizado ainda"
+                description="Sua conta está conectada. Sincronize em Integrações para trazer os pedidos recentes."
+                action={
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/integracoes">Ir para Integrações</Link>
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                compact
+                icon={ShoppingCart}
+                title="Nenhum pedido sincronizado"
+                description="Os pedidos aparecem aqui assim que um marketplace estiver conectado."
+                action={
+                  <Button asChild size="sm">
+                    <Link to="/integracoes">Conectar marketplace</Link>
+                  </Button>
+                }
+              />
+            )
           ) : (
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">

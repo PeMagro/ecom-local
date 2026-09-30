@@ -5,6 +5,7 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import basicSsl from "@vitejs/plugin-basic-ssl";
 
 export default defineConfig({
   tanstackStart: {
@@ -15,4 +16,7 @@ export default defineConfig({
   // Default preset is Cloudflare Workers, which has no node:sqlite/node:fs — the local
   // SQLite backend needs a real Node process, so pin the build target explicitly.
   nitro: { preset: "node-server" },
+  // HTTPS with an auto-generated, auto-trusted self-signed cert — needed because the
+  // Mercado Livre OAuth app has https://127.0.0.1:8080 registered as its redirect_uri.
+  plugins: [basicSsl()],
 });

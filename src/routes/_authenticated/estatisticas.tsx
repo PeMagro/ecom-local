@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Activity,
   ArrowDownRight,
@@ -40,12 +40,13 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { MARKETPLACE_LABEL } from "@/lib/marketplaces";
 import { usePresentation } from "@/hooks/usePresentation";
+import { useAnyMarketplaceConnected } from "@/hooks/useMarketplaceConnected";
 import type { PresentationChannel } from "@/lib/presentation-channels";
 
 export const Route = createFileRoute("/_authenticated/estatisticas")({
   head: () => ({
     meta: [
-      { title: "EstatÃ­sticas | ECOM" },
+      { title: "Estatísticas | ECOM" },
       {
         name: "description",
         content: "Acompanhe vendas, pedidos e produtos dos seus marketplaces.",
@@ -101,11 +102,11 @@ type FilteredOrder = StatsOrder & { items: StatsItem[] };
 
 const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: "today", label: "Hoje" },
-  { key: "7d", label: "Ãšltimos 7 dias" },
-  { key: "30d", label: "Ãšltimos 30 dias" },
-  { key: "3m", label: "Ãšltimos 3 meses" },
-  { key: "6m", label: "Ãšltimos 6 meses" },
-  { key: "1y", label: "Ãšltimo ano" },
+  { key: "7d", label: "Últimos 7 dias" },
+  { key: "30d", label: "Últimos 30 dias" },
+  { key: "3m", label: "Últimos 3 meses" },
+  { key: "6m", label: "Últimos 6 meses" },
+  { key: "1y", label: "Último ano" },
   { key: "custom", label: "Personalizado" },
 ];
 
@@ -190,7 +191,7 @@ function dateLabel(range: Range) {
     day: "2-digit",
     month: "short",
   });
-  return `${format.format(range.from)} â€“ ${format.format(range.to)}`;
+  return `${format.format(range.from)} – ${format.format(range.to)}`;
 }
 
 function percentChange(current: number, previous: number) {
@@ -200,7 +201,7 @@ function percentChange(current: number, previous: number) {
 
 function formatPercent(value: number | null | undefined) {
   if (value === undefined) return "Nova base";
-  if (value === null) return "Sem variaÃ§Ã£o";
+  if (value === null) return "Sem variação";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
@@ -368,6 +369,7 @@ function StatisticsPage() {
   >("best");
 
   const presentation = usePresentation();
+  const { connected: marketplaceConnected } = useAnyMarketplaceConnected();
   const data = useMemo(
     () => buildPresentationStatisticsData(presentation.channels),
     [presentation.channels],
@@ -750,7 +752,7 @@ function StatisticsPage() {
   if (!presentation.ready)
     return (
       <PageShell
-        title="EstatÃ­sticas"
+        title="Estatísticas"
         description="Desempenho dos canais conectados neste navegador"
       >
         <LoadingState />
@@ -774,7 +776,7 @@ function StatisticsPage() {
       change: percentChange(currentMetrics.orders, previousMetrics.orders),
     },
     {
-      label: "Ticket mÃ©dio",
+      label: "Ticket médio",
       value: formatCurrency(currentMetrics.averageTicket),
       prior: currentMetrics.averageTicket - previousMetrics.averageTicket,
       icon: Activity,
@@ -836,15 +838,15 @@ function StatisticsPage() {
 
   return (
     <PageShell
-      title="EstatÃ­sticas"
+      title="Estatísticas"
       description="Desempenho dos canais conectados neste navegador"
     >
       <section
-        aria-label="Filtros das estatÃ­sticas"
+        aria-label="Filtros das estatísticas"
         className="flex flex-wrap items-end gap-2 rounded-lg border border-border/70 bg-card/40 p-3"
       >
         <div className="min-w-44 space-y-1">
-          <label className="text-[11px] text-muted-foreground">PerÃ­odo</label>
+          <label className="text-[11px] text-muted-foreground">Período</label>
           <Select
             value={period}
             onValueChange={(value) => setPeriod(value as PeriodKey)}
@@ -891,7 +893,7 @@ function StatisticsPage() {
         {period === "custom" ? (
           <div className="flex flex-wrap gap-2">
             <DateField label="De" value={customFrom} onChange={setCustomFrom} />
-            <DateField label="AtÃ©" value={customTo} onChange={setCustomTo} />
+            <DateField label="Até" value={customTo} onChange={setCustomTo} />
           </div>
         ) : null}
         <Button
@@ -899,7 +901,7 @@ function StatisticsPage() {
           size="sm"
           className="h-9"
           onClick={refreshLocalData}
-          aria-label="Atualizar estatÃ­sticas"
+          aria-label="Atualizar estatísticas"
         >
           <RefreshCw className="size-3.5" /> Atualizar
         </Button>
@@ -907,12 +909,12 @@ function StatisticsPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <p>
-          PerÃ­odo analisado:{" "}
+          Período analisado:{" "}
           <span className="font-medium text-foreground">
             {dateLabel(range)}
           </span>
         </p>
-        <p>ComparaÃ§Ã£o: perÃ­odo anterior equivalente ({dateLabel(previous)})</p>
+        <p>Comparação: período anterior equivalente ({dateLabel(previous)})</p>
       </div>
 
       <section
@@ -926,8 +928,26 @@ function StatisticsPage() {
 
       {currentOrders.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-5 py-4 text-xs text-muted-foreground">
-          NÃ£o hÃ¡ pedidos neste perÃ­odo e com os filtros selecionados. Os
-          indicadores acompanham os pedidos dos canais conectados nesta sessÃ£o.
+          {marketplaceConnected ? (
+            <>
+              Sua conta está conectada, mas não há pedidos neste período e com
+              os filtros selecionados.{" "}
+              <Link to="/integracoes" className="font-medium text-foreground underline underline-offset-2">
+                Sincronize em Integrações
+              </Link>{" "}
+              para trazer os pedidos recentes.
+            </>
+          ) : (
+            <>
+              Não há pedidos neste período e com os filtros selecionados. Os
+              indicadores acompanham os pedidos dos canais conectados nesta
+              sessão.{" "}
+              <Link to="/integracoes" className="font-medium text-foreground underline underline-offset-2">
+                Conectar marketplace
+              </Link>
+              .
+            </>
+          )}
         </div>
       ) : null}
 
@@ -935,7 +955,7 @@ function StatisticsPage() {
         <Card className="glass-panel border-border/70 shadow-none">
           <CardHeader className="flex-col items-stretch justify-between gap-3 px-4 pb-2 pt-4 sm:flex-row sm:items-center">
             <div>
-              <CardTitle className="text-sm">Desempenho no perÃ­odo</CardTitle>
+              <CardTitle className="text-sm">Desempenho no período</CardTitle>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Dados agregados dos pedidos registrados
               </p>
@@ -1041,7 +1061,7 @@ function StatisticsPage() {
           <CardHeader className="px-4 pb-2 pt-4">
             <CardTitle className="text-sm">Status dos pedidos</CardTitle>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Pedidos dentro do perÃ­odo e filtros atuais
+              Pedidos dentro do período e filtros atuais
             </p>
           </CardHeader>
           <CardContent className="px-2 pb-4 pt-0">
@@ -1099,7 +1119,7 @@ function StatisticsPage() {
               <ChartEmpty />
             )}
             <p className="px-3 text-[10px] text-muted-foreground">
-              A integraÃ§Ã£o atual nÃ£o registra â€œem preparaÃ§Ã£oâ€ como status
+              A integração atual não registra “em preparação” como status
               separado.
             </p>
           </CardContent>
@@ -1124,9 +1144,9 @@ function StatisticsPage() {
                       <th className="px-4 py-2.5">Canal</th>
                       <th className="px-3 py-2.5 text-right">Pedidos</th>
                       <th className="px-3 py-2.5 text-right">Faturamento</th>
-                      <th className="px-3 py-2.5 text-right">ParticipaÃ§Ã£o</th>
-                      <th className="px-3 py-2.5 text-right">Ticket mÃ©dio</th>
-                      <th className="px-4 py-2.5 text-right">VariaÃ§Ã£o</th>
+                      <th className="px-3 py-2.5 text-right">Participação</th>
+                      <th className="px-3 py-2.5 text-right">Ticket médio</th>
+                      <th className="px-4 py-2.5 text-right">Variação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1189,9 +1209,9 @@ function StatisticsPage() {
 
         <Card className="glass-panel border-border/70 shadow-none">
           <CardHeader className="px-4 pb-2 pt-4">
-            <CardTitle className="text-sm">ComparaÃ§Ã£o de perÃ­odos</CardTitle>
+            <CardTitle className="text-sm">Comparação de períodos</CardTitle>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              PerÃ­odo atual Ã— anterior equivalente
+              Período atual × anterior equivalente
             </p>
           </CardHeader>
           <CardContent className="px-4 pb-4 pt-1">
@@ -1218,7 +1238,7 @@ function StatisticsPage() {
                 previous={previousMetrics.products}
               />
               <ComparisonRow
-                label="Ticket mÃ©dio"
+                label="Ticket médio"
                 current={currentMetrics.averageTicket}
                 previous={previousMetrics.averageTicket}
                 currency
@@ -1238,18 +1258,18 @@ function StatisticsPage() {
           <div>
             <CardTitle className="text-sm">Desempenho dos produtos</CardTitle>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Vendas e estoque atuais dos anÃºncios e pedidos dos canais
+              Vendas e estoque atuais dos anúncios e pedidos dos canais
               conectados
             </p>
           </div>
           <FilterSelect
-            label="VisÃ£o"
+            label="Visão"
             value={productView}
             onChange={(value) => setProductView(value as typeof productView)}
             options={[
               ["best", "Mais vendidos"],
               ["decline", "Queda nas vendas"],
-              ["none", "Sem vendas no perÃ­odo"],
+              ["none", "Sem vendas no período"],
               ["low", "Estoque baixo"],
             ]}
           />
@@ -1276,7 +1296,7 @@ function StatisticsPage() {
                     >
                       <td className="px-4 py-3 font-medium">{product.name}</td>
                       <td className="numeric px-3 py-3 text-muted-foreground">
-                        {product.sku || "â€”"}
+                        {product.sku || "—"}
                       </td>
                       <td className="px-3 py-3">
                         {product.channels.length
@@ -1288,7 +1308,7 @@ function StatisticsPage() {
                                   ] ?? channel,
                               )
                               .join(", ")
-                          : "â€”"}
+                          : "—"}
                       </td>
                       <td className="numeric px-3 py-3 text-right">
                         {product.quantity}
@@ -1298,7 +1318,7 @@ function StatisticsPage() {
                       </td>
                       <td className="numeric px-4 py-3 text-right">
                         {product.stock === null ? (
-                          "â€”"
+                          "—"
                         ) : (
                           <span
                             className={
@@ -1317,14 +1337,14 @@ function StatisticsPage() {
               </table>
             </div>
           ) : (
-            <ChartEmpty label="Nenhum produto se enquadra nesta visÃ£o com os filtros selecionados." />
+            <ChartEmpty label="Nenhum produto se enquadra nesta visão com os filtros selecionados." />
           )}
         </CardContent>
       </Card>
       <p className="text-[10px] text-muted-foreground">
         Os indicadores consideram pedidos com pagamento aprovado, enviados ou
-        entregues. Pedidos cancelados e reembolsados nÃ£o entram no faturamento.
-        Os dados vÃªm do modo local de apresentaÃ§Ã£o da plataforma neste
+        entregues. Pedidos cancelados e reembolsados não entram no faturamento.
+        Os dados vêm do modo local de apresentação da plataforma neste
         navegador.
       </p>
     </PageShell>
@@ -1425,7 +1445,7 @@ function MetricCard({
           {change === undefined ? (
             <span>Sem base anterior</span>
           ) : change === null ? (
-            <span>Sem variaÃ§Ã£o</span>
+            <span>Sem variação</span>
           ) : (
             <>
               <TrendIcon className="size-3" />
@@ -1434,7 +1454,7 @@ function MetricCard({
           )}
           {!isGrowth ? (
             <span className="text-muted-foreground">
-              Â· {priorText} de diferenÃ§a
+              · {priorText} de diferença
             </span>
           ) : null}
         </div>
@@ -1477,7 +1497,7 @@ function ComparisonRow({
           <ArrowDownRight className="size-3 text-rose-500" />
         )}
         <span className={positive ? "text-emerald-500" : "text-rose-500"}>
-          {positive ? "+" : "âˆ’"}
+          {positive ? "+" : "−"}
           {formatter(Math.abs(difference))}
         </span>
         <span className="text-muted-foreground">({formatPercent(change)})</span>

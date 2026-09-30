@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { listOrders } from "@/lib/orders.functions";
+import { useAnyMarketplaceConnected } from "@/hooks/useMarketplaceConnected";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { ORDER_STATUS_LABEL } from "@/lib/marketplaces";
 
@@ -46,6 +47,7 @@ export const Route = createFileRoute("/_authenticated/pedidos/")({
 
 function OrdersPage() {
   const { orders: localOrders, ready } = usePresentation();
+  const { connected: marketplaceConnected } = useAnyMarketplaceConnected();
   const [search, setSearch] = useState("");
   const [channel, setChannel] = useState("all");
   const [status, setStatus] = useState("all");
@@ -114,16 +116,29 @@ function OrdersPage() {
       ) : query.isError && localOrders.length === 0 ? (
         <ErrorState message={(query.error as Error).message} onRetry={() => query.refetch()} />
       ) : orders.length === 0 ? (
-        <EmptyState
-          icon={ShoppingCart}
-          title="Nenhum pedido encontrado"
-          description="Os pedidos chegam automaticamente dos marketplaces conectados."
-          action={
-            <Button asChild size="sm">
-              <Link to="/integracoes">Conectar marketplace</Link>
-            </Button>
-          }
-        />
+        marketplaceConnected ? (
+          <EmptyState
+            icon={ShoppingCart}
+            title="Nenhum pedido sincronizado ainda"
+            description="Sua conta está conectada. Sincronize em Integrações para trazer os pedidos recentes, ou aguarde a próxima venda."
+            action={
+              <Button asChild size="sm" variant="outline">
+                <Link to="/integracoes">Ir para Integrações</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={ShoppingCart}
+            title="Nenhum pedido encontrado"
+            description="Os pedidos chegam automaticamente dos marketplaces conectados."
+            action={
+              <Button asChild size="sm">
+                <Link to="/integracoes">Conectar marketplace</Link>
+              </Button>
+            }
+          />
+        )
       ) : (
         <div className="glass-panel overflow-hidden rounded-lg">
           <table className="w-full text-xs">

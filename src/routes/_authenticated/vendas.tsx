@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { listSales } from "@/lib/sales.functions";
+import { useAnyMarketplaceConnected } from "@/hooks/useMarketplaceConnected";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { ORDER_STATUS_LABEL } from "@/lib/marketplaces";
 
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/_authenticated/vendas")({
 
 function SalesPage() {
   const { orders: connectedOrders, ready } = usePresentation();
+  const { connected: marketplaceConnected } = useAnyMarketplaceConnected();
   const [search, setSearch] = useState("");
   const [channel, setChannel] = useState("all");
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
@@ -135,16 +137,29 @@ function SalesPage() {
       ) : query.isError && presentationSales.length === 0 ? (
         <ErrorState message={(query.error as Error).message} onRetry={() => query.refetch()} />
       ) : sales.length === 0 ? (
-        <EmptyState
-          icon={Receipt}
-          title="Nenhuma venda sincronizada"
-          description="As vendas são importadas automaticamente dos marketplaces conectados. Não é possível lançar vendas manualmente."
-          action={
-            <Button asChild size="sm">
-              <Link to="/integracoes">Conectar marketplace</Link>
-            </Button>
-          }
-        />
+        marketplaceConnected ? (
+          <EmptyState
+            icon={Receipt}
+            title="Nenhuma venda sincronizada ainda"
+            description="Sua conta está conectada. As vendas aparecem aqui automaticamente conforme os pedidos forem pagos nos canais conectados."
+            action={
+              <Button asChild size="sm" variant="outline">
+                <Link to="/integracoes">Ir para Integrações</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Receipt}
+            title="Nenhuma venda sincronizada"
+            description="As vendas são importadas automaticamente dos marketplaces conectados. Não é possível lançar vendas manualmente."
+            action={
+              <Button asChild size="sm">
+                <Link to="/integracoes">Conectar marketplace</Link>
+              </Button>
+            }
+          />
+        )
       ) : (
         <div className="glass-panel overflow-hidden rounded-lg">
           <table className="w-full text-xs">

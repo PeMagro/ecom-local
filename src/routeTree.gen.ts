@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedAgenteEcomRouteImport } from './routes/_authenticated/agente-ecom'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedDocumentosRouteImport } from './routes/_authenticated/documentos'
 import { Route as AuthenticatedEstatisticasRouteImport } from './routes/_authenticated/estatisticas'
@@ -21,6 +22,8 @@ import { Route as AuthenticatedIntegracoesRouteImport } from './routes/_authenti
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedVendasRouteImport } from './routes/_authenticated/vendas'
 import { Route as AuthenticatedVisaoGeralRouteImport } from './routes/_authenticated/visao-geral'
+import { Route as PreviewAmazonRouteImport } from './routes/preview/amazon'
+import { Route as PreviewShopeeRouteImport } from './routes/preview/shopee'
 import { Route as AuthenticatedAnunciosIndexRouteImport } from './routes/_authenticated/anuncios.index'
 import { Route as AuthenticatedAnunciosDemoRouteImport } from './routes/_authenticated/anuncios.demo'
 import { Route as AuthenticatedAnunciosNovoRouteImport } from './routes/_authenticated/anuncios.novo'
@@ -46,6 +49,11 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAgenteEcomRoute = AuthenticatedAgenteEcomRouteImport.update({
+  id: '/agente-ecom',
+  path: '/agente-ecom',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedConfiguracoesRoute =
   AuthenticatedConfiguracoesRouteImport.update({
@@ -94,6 +102,16 @@ const AuthenticatedVisaoGeralRoute = AuthenticatedVisaoGeralRouteImport.update({
   id: '/visao-geral',
   path: '/visao-geral',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const PreviewAmazonRoute = PreviewAmazonRouteImport.update({
+  id: '/preview/amazon',
+  path: '/preview/amazon',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreviewShopeeRoute = PreviewShopeeRouteImport.update({
+  id: '/preview/shopee',
+  path: '/preview/shopee',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAnunciosIndexRoute =
   AuthenticatedAnunciosIndexRouteImport.update({
@@ -164,6 +182,7 @@ const ApiPublicMarketplacesWebhookMarketplaceRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/agente-ecom': typeof AuthenticatedAgenteEcomRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/documentos': typeof AuthenticatedDocumentosRoute
   '/estatisticas': typeof AuthenticatedEstatisticasRoute
@@ -173,6 +192,8 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/vendas': typeof AuthenticatedVendasRoute
   '/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/preview/amazon': typeof PreviewAmazonRoute
+  '/preview/shopee': typeof PreviewShopeeRoute
   '/anuncios/demo': typeof AuthenticatedAnunciosDemoRoute
   '/anuncios/novo': typeof AuthenticatedAnunciosNovoRoute
   '/pedidos/$orderId': typeof AuthenticatedPedidosOrderIdRoute
@@ -188,6 +209,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/agente-ecom': typeof AuthenticatedAgenteEcomRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/documentos': typeof AuthenticatedDocumentosRoute
   '/estatisticas': typeof AuthenticatedEstatisticasRoute
@@ -197,6 +219,8 @@ export interface FileRoutesByTo {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/vendas': typeof AuthenticatedVendasRoute
   '/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/preview/amazon': typeof PreviewAmazonRoute
+  '/preview/shopee': typeof PreviewShopeeRoute
   '/anuncios/demo': typeof AuthenticatedAnunciosDemoRoute
   '/anuncios/novo': typeof AuthenticatedAnunciosNovoRoute
   '/pedidos/$orderId': typeof AuthenticatedPedidosOrderIdRoute
@@ -214,6 +238,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/agente-ecom': typeof AuthenticatedAgenteEcomRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/documentos': typeof AuthenticatedDocumentosRoute
   '/_authenticated/estatisticas': typeof AuthenticatedEstatisticasRoute
@@ -223,6 +248,8 @@ export interface FileRoutesById {
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/vendas': typeof AuthenticatedVendasRoute
   '/_authenticated/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/preview/amazon': typeof PreviewAmazonRoute
+  '/preview/shopee': typeof PreviewShopeeRoute
   '/_authenticated/anuncios/demo': typeof AuthenticatedAnunciosDemoRoute
   '/_authenticated/anuncios/novo': typeof AuthenticatedAnunciosNovoRoute
   '/_authenticated/pedidos/$orderId': typeof AuthenticatedPedidosOrderIdRoute
@@ -240,6 +267,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/agente-ecom'
     | '/configuracoes'
     | '/documentos'
     | '/estatisticas'
@@ -249,6 +277,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/vendas'
     | '/visao-geral'
+    | '/preview/amazon'
+    | '/preview/shopee'
     | '/anuncios/demo'
     | '/anuncios/novo'
     | '/pedidos/$orderId'
@@ -264,6 +294,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/agente-ecom'
     | '/configuracoes'
     | '/documentos'
     | '/estatisticas'
@@ -273,6 +304,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/vendas'
     | '/visao-geral'
+    | '/preview/amazon'
+    | '/preview/shopee'
     | '/anuncios/demo'
     | '/anuncios/novo'
     | '/pedidos/$orderId'
@@ -289,6 +322,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/agente-ecom'
     | '/_authenticated/configuracoes'
     | '/_authenticated/documentos'
     | '/_authenticated/estatisticas'
@@ -298,6 +332,8 @@ export interface FileRouteTypes {
     | '/_authenticated/onboarding'
     | '/_authenticated/vendas'
     | '/_authenticated/visao-geral'
+    | '/preview/amazon'
+    | '/preview/shopee'
     | '/_authenticated/anuncios/demo'
     | '/_authenticated/anuncios/novo'
     | '/_authenticated/pedidos/$orderId'
@@ -315,6 +351,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  PreviewAmazonRoute: typeof PreviewAmazonRoute
+  PreviewShopeeRoute: typeof PreviewShopeeRoute
   ApiAiChatRoute: typeof ApiAiChatRoute
   ApiPublicIntegracoesCallbackMarketplaceRoute: typeof ApiPublicIntegracoesCallbackMarketplaceRoute
   ApiPublicMarketplacesWebhookMarketplaceRoute: typeof ApiPublicMarketplacesWebhookMarketplaceRoute
@@ -342,6 +380,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/agente-ecom': {
+      id: '/_authenticated/agente-ecom'
+      path: '/agente-ecom'
+      fullPath: '/agente-ecom'
+      preLoaderRoute: typeof AuthenticatedAgenteEcomRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/configuracoes': {
       id: '/_authenticated/configuracoes'
@@ -405,6 +450,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/visao-geral'
       preLoaderRoute: typeof AuthenticatedVisaoGeralRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/preview/amazon': {
+      id: '/preview/amazon'
+      path: '/preview/amazon'
+      fullPath: '/preview/amazon'
+      preLoaderRoute: typeof PreviewAmazonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/preview/shopee': {
+      id: '/preview/shopee'
+      path: '/preview/shopee'
+      fullPath: '/preview/shopee'
+      preLoaderRoute: typeof PreviewShopeeRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/anuncios/': {
       id: '/_authenticated/anuncios/'
@@ -487,6 +546,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAgenteEcomRoute: typeof AuthenticatedAgenteEcomRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedDocumentosRoute: typeof AuthenticatedDocumentosRoute
   AuthenticatedEstatisticasRoute: typeof AuthenticatedEstatisticasRoute
@@ -507,6 +567,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAgenteEcomRoute: AuthenticatedAgenteEcomRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedDocumentosRoute: AuthenticatedDocumentosRoute,
   AuthenticatedEstatisticasRoute: AuthenticatedEstatisticasRoute,
@@ -533,6 +594,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  PreviewAmazonRoute: PreviewAmazonRoute,
+  PreviewShopeeRoute: PreviewShopeeRoute,
   ApiAiChatRoute: ApiAiChatRoute,
   ApiPublicIntegracoesCallbackMarketplaceRoute:
     ApiPublicIntegracoesCallbackMarketplaceRoute,
