@@ -207,23 +207,26 @@ ORDEM DE IMPLEMENTAÇÃO NESTE PRIMEIRO BUILD
 
 Ao final, revise toda a navegação e garanta que não existam módulos Clientes, Comunidade, pedidos manuais, vendas manuais, marketplace "Outros" ou "Manual".
 
-This project was built with [Lovable](https://lovable.dev).
+Este projeto nasceu no [Lovable](https://lovable.dev) (o prompt original acima) e depois foi migrado para rodar **100% local**: sem Supabase, sem Lovable, sem depender de internet. Autenticação, dados e upload de imagem ficam num banco SQLite em disco (`data/ecom.db`).
 
-## Build with Lovable
+## Rodando localmente
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/7409acfa-2bc6-4b18-b616-fcad75609a35).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+**Pré-requisitos:** [Node.js 22 ou mais novo](https://nodejs.org/) (usa o módulo nativo `node:sqlite`, sem dependência nativa pra compilar) e `npm`.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+git clone https://github.com/PeMagro/ecom-local.git
+cd ecom-local
+npm install
+
+# copie o exemplo e gere seu próprio segredo de sessão
+cp .env.example .env
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# cole o resultado no SESSION_SECRET do .env
+
+npm run db:init   # cria o banco SQLite em data/ecom.db (idempotente)
+npm run dev       # sobe o servidor — normalmente em http://localhost:8080
 ```
+
+Abra a URL que aparecer no terminal, crie uma conta em `/auth` e comece a usar. Tudo fica salvo localmente na sua máquina (`data/ecom.db` e `public/uploads/`) — cada pessoa que clonar o repositório tem o próprio banco, ninguém compartilha dados.
+
+**Opcional:** as integrações com Mercado Livre/Shopee/Amazon e o assistente de IA (ECO) exigem chaves próprias — veja os comentários em `.env.example` para a lista completa. Sem elas, essas telas mostram "não configurado" em vez de quebrar.

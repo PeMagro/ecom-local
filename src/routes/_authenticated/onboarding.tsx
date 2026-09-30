@@ -34,6 +34,20 @@ function Onboarding() {
 
   const steps = ["Perfil", "Marketplaces", "Assistente de IA", "Preferências"];
 
+  function goNext() {
+    setStep((current) => {
+      if (current === 0 && sellsOnline === false) return 2; // ainda não vende: pula "Marketplaces"
+      return current + 1;
+    });
+  }
+
+  function goBack() {
+    setStep((current) => {
+      if (current === 2 && sellsOnline === false) return 0; // desfaz o pulo do "Marketplaces"
+      return Math.max(0, current - 1);
+    });
+  }
+
   async function finish() {
     setSaving(true);
     try {
@@ -230,20 +244,11 @@ function Onboarding() {
         </div>
 
         <div className="mt-6 flex items-center justify-between border-t border-border pt-5">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setStep((value) => Math.max(0, value - 1))}
-            disabled={step === 0}
-          >
+          <Button variant="ghost" size="sm" onClick={goBack} disabled={step === 0}>
             Voltar
           </Button>
           {step < 3 ? (
-            <Button
-              size="sm"
-              onClick={() => setStep((value) => value + 1)}
-              disabled={step === 0 && sellsOnline === null}
-            >
+            <Button size="sm" onClick={goNext} disabled={step === 0 && sellsOnline === null}>
               Continuar
             </Button>
           ) : (
