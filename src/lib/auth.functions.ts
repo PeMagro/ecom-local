@@ -83,6 +83,23 @@ export const getCurrentUser = createServerFn({ method: "GET" }).handler(async ()
   return { user: loadPublicUser(userId) };
 });
 
+// getCurrentUser() only throws on transient failures (a dropped connection while the
+// dev server/tunnel is reconnecting, a flaky response, etc.) — an unauthenticated user
+// is a normal { user: null } result, not a throw. So retrying every throw here is safe:
+// it rides out the blip instead of surfacing an error for what's really just a hiccup.
+export async function getCurrentUserWithRetry(
+  attempts = 3,
+): Promise<Awaited<ReturnType<typeof getCurrentUser>>> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await getCurrentUser();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 300));
+    }
+  }
+}
+
 const changePasswordInput = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(8, "A nova senha precisa ter pelo menos 8 caracteres."),

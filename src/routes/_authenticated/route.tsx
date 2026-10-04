@@ -3,12 +3,12 @@ import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tansta
 import { AccessibilityWidget } from "@/components/layout/AccessibilityWidget";
 import { Sparkles } from "lucide-react";
 import { AppSidebar } from "@/components/layout/AppSidebar";
-import { getCurrentUser } from "@/lib/auth.functions";
+import { getCurrentUserWithRetry } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { user } = await getCurrentUser();
+    const { user } = await getCurrentUserWithRetry();
     if (!user) throw redirect({ to: "/auth" });
     return { user };
   },

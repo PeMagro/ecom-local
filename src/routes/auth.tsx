@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCurrentUser, login, signup } from "@/lib/auth.functions";
+import { getCurrentUserWithRetry, login, signup } from "@/lib/auth.functions";
 import { isValidCpf, maskCpf } from "@/lib/format";
 
 export const Route = createFileRoute("/auth")({
@@ -47,9 +47,13 @@ function AuthPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    getCurrentUser().then((result) => {
-      if (result.user) navigate({ to: "/visao-geral" });
-    });
+    getCurrentUserWithRetry()
+      .then((result) => {
+        if (result.user) navigate({ to: "/visao-geral" });
+      })
+      .catch(() => {
+        // Already-logged-in users just stay on the login form and can submit it normally.
+      });
   }, [navigate]);
 
   function validate(): boolean {
