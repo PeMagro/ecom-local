@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +29,17 @@ import { connectDemo, disconnectDemo } from "@/lib/ml-demo";
 import { CHANNELS, CHANNEL_LABEL, type PresentationChannel } from "@/lib/presentation-channels";
 import { formatDateTime } from "@/lib/format";
 
+// Nome do canal usado para sincronizar o resultado da autorização OAuth (feita
+// numa aba separada) de volta para a aba original da plataforma.
+const ML_OAUTH_CHANNEL = "ecom-marketplace-oauth";
+
+const ML_ERROR_MESSAGES: Record<string, string> = {
+  canal_nao_suportado: "Este canal ainda não está disponível.",
+  parametros_invalidos: "O Mercado Livre não enviou os parâmetros esperados.",
+  state_invalido: "A sessão de autorização expirou ou é inválida. Tente conectar novamente.",
+  conexao_nao_salva: "Não foi possível salvar a conexão. Tente novamente.",
+};
+
 export const Route = createFileRoute("/_authenticated/integracoes")({
   head: () => ({
     meta: [
@@ -46,12 +57,100 @@ function IntegrationsPage() {
   const [disconnecting, setDisconnecting] = useState<PresentationChannel | null>(null);
   const [connecting, setConnecting] = useState<PresentationChannel | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [oauthTabBanner, setOauthTabBanner] = useState<{
+    status: "sucesso" | "erro";
+    motivo?: string;
+  } | null>(null);
+  const connectingRef = useRef(connecting);
+  connectingRef.current = connecting;
 
   const mlConnectionQuery = useQuery({
     queryKey: ["marketplace-connection", user?.id, "mercado_livre"],
     enabled: Boolean(user?.id),
     queryFn: () => getMarketplaceConnection({ data: { marketplace: "mercado_livre" } }),
   });
+
+  function handleOAuthResult(result: { status: "sucesso" | "erro"; motivo?: string }) {
+    if (result.status === "sucesso") {
+      toast.success("Mercado Livre conectado", {
+        description: "A autorização foi concluída na outra guia.",
+      });
+    } else {
+      toast.error("Não foi possível conectar o Mercado Livre", {
+        description:
+          (result.motivo ? ML_ERROR_MESSAGES[result.motivo] : undefined) ??
+          result.motivo ??
+          "Tente novamente.",
+      });
+    }
+    setConnecting(null);
+    void mlConnectionQuery.refetch();
+  }
+
+  // Esta aba é a guia de autorização: o callback do servidor redireciona para
+  // cá com ?integracao=sucesso|erro depois do OAuth. Avisa a aba original via
+  // BroadcastChannel e se fecha sozinha (não faz nada se não foi aberta por
+  // window.open — browsers ignoram window.close() nesse caso).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("integracao");
+    if (status !== "sucesso" && status !== "erro") return;
+
+    const motivo = params.get("motivo") ?? undefined;
+    const result = { status, motivo } as { status: "sucesso" | "erro"; motivo?: string };
+
+    try {
+      new BroadcastChannel(ML_OAUTH_CHANNEL).postMessage(result);
+    } catch {
+      // BroadcastChannel indisponível (navegador antigo) — a aba original cai
+      // no fallback de polling abaixo.
+    }
+
+    handleOAuthResult(result);
+    window.history.replaceState(null, "", window.location.pathname);
+
+    // Se o pop-up foi bloqueado, connect() cai de volta para navegar nesta
+    // mesma guia — nesse caso ela já tinha histórico (veio do dashboard) e
+    // não deve ser oferecida para fechar. Uma guia aberta via window.open
+    // para o OAuth não acumula histórico próprio além desta página.
+    if (window.history.length <= 1) {
+      setOauthTabBanner(result);
+      window.close(); // só funciona se o navegador considerar a guia "fechável" por script
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Aba original: escuta o resultado publicado pela guia de autorização.
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(ML_OAUTH_CHANNEL);
+    channel.onmessage = (event: MessageEvent<{ status: "sucesso" | "erro"; motivo?: string }>) => {
+      handleOAuthResult(event.data);
+    };
+    return () => channel.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fallback por polling: cobre o caso de BroadcastChannel não entregar a
+  // mensagem (ex.: a guia de autorização foi fechada manualmente antes de
+  // processar o callback). Para assim que sair de "connecting" ou após 5min.
+  useEffect(() => {
+    if (connecting !== "mercado_livre") return;
+    const startedAt = Date.now();
+    const interval = setInterval(async () => {
+      if (Date.now() - startedAt > 5 * 60 * 1000) {
+        clearInterval(interval);
+        return;
+      }
+      const result = await mlConnectionQuery.refetch();
+      if (result.data?.status === "connected" || result.data?.status === "error") {
+        clearInterval(interval);
+        if (connectingRef.current === "mercado_livre") setConnecting(null);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connecting]);
 
   async function connect(channel: PresentationChannel) {
     if (!user) return;
@@ -69,7 +168,13 @@ function IntegrationsPage() {
           setConnecting(null);
           return;
         }
-        window.location.assign(result.authorizationUrl);
+        const authTab = window.open(result.authorizationUrl, "_blank", "noopener,noreferrer");
+        if (!authTab) {
+          toast.warning("Pop-up bloqueado pelo navegador", {
+            description: "Permita pop-ups para este site, ou continuaremos na mesma guia.",
+          });
+          window.location.assign(result.authorizationUrl);
+        }
       } catch (error) {
         toast.error("Não foi possível iniciar a conexão", {
           description: error instanceof Error ? error.message : "Tente novamente.",
@@ -138,6 +243,28 @@ function IntegrationsPage() {
 
   return (
     <PageShell title="Integrações" description="Conecte e gerencie seus canais de venda">
+      {oauthTabBanner ? (
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 text-sm ${
+            oauthTabBanner.status === "sucesso"
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-destructive/40 bg-destructive/10 text-destructive"
+          }`}
+        >
+          <span>
+            {oauthTabBanner.status === "sucesso"
+              ? "Conexão concluída. Pode fechar esta guia e voltar para a ECOM."
+              : `Não foi possível concluir a conexão: ${
+                  (oauthTabBanner.motivo ? ML_ERROR_MESSAGES[oauthTabBanner.motivo] : undefined) ??
+                  oauthTabBanner.motivo ??
+                  "tente novamente"
+                }. Pode fechar esta guia.`}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => window.close()}>
+            Fechar guia
+          </Button>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {CHANNELS.map((channel) => {
           const isMercadoLivre = channel.id === "mercado_livre";
