@@ -174,6 +174,10 @@ interface ListingProductRow {
   price: number | null;
   barcode: string | null;
   brand: string | null;
+  weight_grams: number | null;
+  length_cm: number | null;
+  width_cm: number | null;
+  height_cm: number | null;
 }
 
 interface ProductImageIdRow {
@@ -187,7 +191,8 @@ export const listProductsForListingPicker = createServerFn({ method: "POST" })
     const db = context.db;
     const products = db
       .prepare(
-        `SELECT id, name, description, price, barcode, brand FROM products WHERE user_id = ? ORDER BY name`,
+        `SELECT id, name, description, price, barcode, brand, weight_grams, length_cm, width_cm, height_cm
+         FROM products WHERE user_id = ? ORDER BY name`,
       )
       .all(context.userId) as unknown as ListingProductRow[];
     const imageStmt = db.prepare(`SELECT id FROM product_images WHERE product_id = ?`);

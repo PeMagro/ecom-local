@@ -149,6 +149,19 @@ function NewListingPage() {
   const [mlAiBusy, setMlAiBusy] = useState(false);
   const [mlListingId, setMlListingId] = useState<string | null>(null);
   const [mlPublishing, setMlPublishing] = useState(false);
+  // Atributos que já apareceram no formulário (obrigatórios, condicionais ou
+  // digitados pelo usuário) continuam visíveis mesmo se o valor for apagado
+  // para corrigir — sem isso, limpar o campo pra digitar de novo fazia o
+  // campo sumir inteiro (ex.: corrigir um GTIN rejeitado pelo ML).
+  const [mlTouchedAttrs, setMlTouchedAttrs] = useState<Set<string>>(new Set());
+  // Peso/dimensões já cadastrados no produto — usados pra pré-preencher o
+  // pacote quando o envio exigir essas medidas (me1/me2).
+  const [mlProductDims, setMlProductDims] = useState({
+    weight: "",
+    height: "",
+    width: "",
+    length: "",
+  });
   const mlErr = (field: string) => mlIssues?.find((i) => i.field === field)?.message;
   // Campos compartilhados (título/preço/estoque/fotos) também entram na
   // validação oficial do Mercado Livre — mostra a pendência aqui se for o
@@ -171,6 +184,12 @@ function NewListingPage() {
       gtin: p.barcode ?? "",
       pictureCount: p.product_images?.length ?? 0,
     });
+    setMlProductDims({
+      weight: p.weight_grams != null ? String(Math.round(p.weight_grams)) : "",
+      height: p.height_cm != null ? String(Math.round(p.height_cm)) : "",
+      width: p.width_cm != null ? String(Math.round(p.width_cm)) : "",
+      length: p.length_cm != null ? String(Math.round(p.length_cm)) : "",
+    });
     // Reseta o estado por plataforma — reidratado abaixo se já houver
     // rascunho salvo para este produto.
     setMlMeta(null);
@@ -180,6 +199,7 @@ function NewListingPage() {
     setMlIssues(null);
     setMlApproved(false);
     setMlListingId(null);
+    setMlTouchedAttrs(new Set());
   }
 
   // Reabre a tela já preenchida quando o produto selecionado já tem um
@@ -279,17 +299,20 @@ function NewListingPage() {
     try {
       const meta = await getMlCategoryMetadata({ data: { categoryId } });
       setMlMeta(meta);
+      let prefilledGtin = false;
       setMlSpec((s) => {
         const next = { ...s, categoryId: meta.categoryId, categoryName: meta.categoryName };
         const gtinMeta = meta.attributes.find((a) => a.id === "GTIN");
         if (gtinMeta && core.gtin.trim() && !hasAnyValue(next.attributes["GTIN"])) {
           next.attributes = { ...next.attributes, GTIN: { value_name: core.gtin.trim() } };
+          prefilledGtin = true;
         }
         return next;
       });
       setMlConditionalIds([]);
       setMlIssues(null);
       setMlApproved(false);
+      setMlTouchedAttrs(prefilledGtin ? new Set(["GTIN"]) : new Set());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao carregar a categoria.");
     } finally {
@@ -303,8 +326,28 @@ function NewListingPage() {
     setMlApproved(false);
   }
 
+  function setMlShippingMode(mode: string) {
+    setMlSpec((s) => {
+      const next = { ...s, shippingMode: mode };
+      // Entrando num modo que exige peso/dimensões: pré-preenche com o que
+      // já está cadastrado no produto (só os campos ainda vazios — não
+      // sobrescreve o que o usuário já digitou).
+      if (PACKAGE_MODES.includes(mode)) {
+        next.pkg = {
+          weight: s.pkg.weight || mlProductDims.weight,
+          height: s.pkg.height || mlProductDims.height,
+          width: s.pkg.width || mlProductDims.width,
+          length: s.pkg.length || mlProductDims.length,
+        };
+      }
+      return next;
+    });
+    setMlApproved(false);
+  }
+
   function setMlAttr(id: string, value: MlValue, scope: "attributes" | "saleTerms" = "attributes") {
     setMlSpec((s) => ({ ...s, [scope]: { ...s[scope], [id]: value } }));
+    setMlTouchedAttrs((prev) => new Set(prev).add(id));
     setMlApproved(false);
   }
 
@@ -536,9 +579,9 @@ function NewListingPage() {
           <p className="numeric pt-2">{core.pictureCount}</p>
           {coreErr("pictures")}
         </div>
-        <label className="space-y-1 sm:col-span-2">
-          <span className="flex items-center justify-between text-muted-foreground">
-            Descrição
+        <div className="space-y-1 sm:col-span-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Descrição</span>
             <Button
               type="button"
               size="sm"
@@ -548,13 +591,13 @@ function NewListingPage() {
             >
               {aiBusy ? "ECO está escrevendo…" : "Apoio da ECO"}
             </Button>
-          </span>
+          </div>
           <Textarea
             rows={3}
             value={core.description}
             onChange={(e) => setCorePatch({ description: e.target.value })}
           />
-        </label>
+        </div>
       </div>
 
       {platforms.has("mercado_livre") ? (
@@ -567,6 +610,7 @@ function NewListingPage() {
           mlSearching={mlSearching}
           mlLoadingMeta={mlLoadingMeta}
           mlConditionalIds={mlConditionalIds}
+          mlTouchedAttrs={mlTouchedAttrs}
           mlErr={mlErr}
           onSearch={searchMlCat}
           onPickCategory={pickMlCategory}
@@ -578,7 +622,7 @@ function NewListingPage() {
           }}
           onCondition={setMlCondition}
           onListingType={(id) => setMlSpec((s) => ({ ...s, listingTypeId: id }))}
-          onShippingMode={(mode) => setMlSpec((s) => ({ ...s, shippingMode: mode }))}
+          onShippingMode={setMlShippingMode}
           onAttr={setMlAttr}
           onPkg={(k, v) => setMlSpec((s) => ({ ...s, pkg: { ...s.pkg, [k]: v } }))}
           extra={
@@ -633,6 +677,7 @@ function MercadoLivreCategoryAndSpec({
   mlSearching,
   mlLoadingMeta,
   mlConditionalIds,
+  mlTouchedAttrs,
   mlErr,
   onSearch,
   onPickCategory,
@@ -652,6 +697,7 @@ function MercadoLivreCategoryAndSpec({
   mlSearching: boolean;
   mlLoadingMeta: boolean;
   mlConditionalIds: string[];
+  mlTouchedAttrs: Set<string>;
   mlErr: (field: string) => string | undefined;
   onSearch: () => void;
   onPickCategory: (categoryId: string) => void;
@@ -668,12 +714,16 @@ function MercadoLivreCategoryAndSpec({
         (a) =>
           isRequired(a, mlSpec.condition) ||
           mlConditionalIds.includes(a.id) ||
+          mlTouchedAttrs.has(a.id) ||
           hasAnyValue(mlSpec.attributes[a.id]),
       )
     : [];
   const wantedTerms = mlMeta
     ? mlMeta.saleTerms.filter(
-        (t) => isRequired(t, mlSpec.condition) || hasAnyValue(mlSpec.saleTerms[t.id]),
+        (t) =>
+          isRequired(t, mlSpec.condition) ||
+          mlTouchedAttrs.has(t.id) ||
+          hasAnyValue(mlSpec.saleTerms[t.id]),
       )
     : [];
 

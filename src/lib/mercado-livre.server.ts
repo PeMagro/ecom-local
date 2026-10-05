@@ -98,8 +98,12 @@ export async function refreshToken(refresh: string): Promise<TokenResponse> {
 export async function getValidAccessToken(connectionId: string): Promise<string | null> {
   const db = getDb();
   const data = db
-    .prepare(`SELECT access_token, refresh_token, expires_at FROM marketplace_credentials WHERE connection_id = ?`)
-    .get(connectionId) as { access_token: string | null; refresh_token: string | null; expires_at: string | null } | undefined;
+    .prepare(
+      `SELECT access_token, refresh_token, expires_at FROM marketplace_credentials WHERE connection_id = ?`,
+    )
+    .get(connectionId) as
+    | { access_token: string | null; refresh_token: string | null; expires_at: string | null }
+    | undefined;
 
   if (!data?.access_token) return null;
 
@@ -322,12 +326,32 @@ export async function mlValidateItem(accessToken: string, payload: unknown): Pro
   }
   const causes = (json.cause ?? []).filter((c) => c.type !== "warning");
   if (!causes.length) {
-    return [{ field: "official", message: [json.error, json.message].filter(Boolean).join(" · ") || `Erro ${res.status}` }];
+    return [
+      {
+        field: "official",
+        message: [json.error, json.message].filter(Boolean).join(" · ") || `Erro ${res.status}`,
+      },
+    ];
   }
   return causes.map((c) => {
     const ref = (c.references ?? []).join(" ");
-    const attr = /attributes?\.?\[?([A-Z_]+)/.exec(`${ref} ${c.message ?? ""}`)?.[1];
-    const field = attr ? `attr:${attr}` : /title|family_name/.test(ref) ? "title" : /price/.test(ref) ? "price" : /quantity/.test(ref) ? "stock" : /picture/.test(ref) ? "pictures" : "official";
+    const combined = `${ref} ${c.message ?? ""}`;
+    // Most causes read "...attribute[ID]...", but some (e.g. GTIN format
+    // rejections) instead read "Product Identifier [GTIN] contains..." with
+    // no "attribute" word at all — fall back to any bracketed official code.
+    const attr =
+      /attributes?\.?\[?([A-Z_]+)/.exec(combined)?.[1] ?? /\[([A-Z_]+)\]/.exec(combined)?.[1];
+    const field = attr
+      ? `attr:${attr}`
+      : /title|family_name/.test(ref)
+        ? "title"
+        : /price/.test(ref)
+          ? "price"
+          : /quantity/.test(ref)
+            ? "stock"
+            : /picture/.test(ref)
+              ? "pictures"
+              : "official";
     return { field, message: [c.code, c.message].filter(Boolean).join(": ") };
   });
 }
@@ -335,18 +359,36 @@ export async function mlValidateItem(accessToken: string, payload: unknown): Pro
 type Me = { id: number; tags?: string[] };
 
 /** Metadados oficiais atuais da categoria para a conta do vendedor. */
-export async function loadCategoryMetadata(token: string, categoryId: string, me: Me): Promise<MlMetadata> {
-  if (!/^MLB\d+$/.test(categoryId)) throw new Error("Categoria inválida. Use o ID oficial (ex.: MLB1055).");
+export async function loadCategoryMetadata(
+  token: string,
+  categoryId: string,
+  me: Me,
+): Promise<MlMetadata> {
+  if (!/^MLB\d+$/.test(categoryId))
+    throw new Error("Categoria inválida. Use o ID oficial (ex.: MLB1055).");
   const [cat, attrs, terms, types, prefs] = await Promise.all([
-    mlFetch<{ id: string; name: string; path_from_root?: Array<{ name: string }>; settings?: Record<string, unknown> }>(token, `/categories/${categoryId}`),
+    mlFetch<{
+      id: string;
+      name: string;
+      path_from_root?: Array<{ name: string }>;
+      settings?: Record<string, unknown>;
+    }>(token, `/categories/${categoryId}`),
     mlFetch<MlAttributeMeta[]>(token, `/categories/${categoryId}/attributes`),
-    mlFetch<MlAttributeMeta[]>(token, `/categories/${categoryId}/sale_terms`).catch(() => [] as MlAttributeMeta[]),
+    mlFetch<MlAttributeMeta[]>(token, `/categories/${categoryId}/sale_terms`).catch(
+      () => [] as MlAttributeMeta[],
+    ),
     mlFetch<unknown>(token, `/users/${me.id}/available_listing_types?category_id=${categoryId}`),
-    mlFetch<{ modes?: string[] }>(token, `/users/${me.id}/shipping_preferences`).catch(() => ({ modes: [] as string[] })),
+    mlFetch<{ modes?: string[] }>(token, `/users/${me.id}/shipping_preferences`).catch(() => ({
+      modes: [] as string[],
+    })),
   ]);
   const settings = cat.settings ?? {};
-  const typeList = (Array.isArray(types) ? types : ((types as { available?: unknown[] })?.available ?? [])) as Array<{ id: string; name?: string }>;
-  const catModes = Array.isArray(settings["shipping_modes"]) ? (settings["shipping_modes"] as string[]) : null;
+  const typeList = (
+    Array.isArray(types) ? types : ((types as { available?: unknown[] })?.available ?? [])
+  ) as Array<{ id: string; name?: string }>;
+  const catModes = Array.isArray(settings["shipping_modes"])
+    ? (settings["shipping_modes"] as string[])
+    : null;
   const userModes = prefs.modes ?? [];
   const shippingModes = catModes ? userModes.filter((m) => catModes.includes(m)) : userModes;
   return {
@@ -368,7 +410,9 @@ export async function loadCategoryMetadata(token: string, categoryId: string, me
 
 async function ownedConnection(userId: string) {
   const connection = getDb()
-    .prepare(`SELECT id, status FROM marketplace_connections WHERE user_id = ? AND marketplace = 'mercado_livre'`)
+    .prepare(
+      `SELECT id, status FROM marketplace_connections WHERE user_id = ? AND marketplace = 'mercado_livre'`,
+    )
     .get(userId) as { id: string; status: string } | undefined;
   if (!connection || connection.status !== "connected")
     throw new Error("Conecte sua conta do Mercado Livre em Integrações antes de continuar.");
@@ -381,14 +425,25 @@ async function ownedConnection(userId: string) {
 export async function searchCategories(userId: string, query: string) {
   const { token } = await ownedConnection(userId);
   if (/^MLB\d+$/.test(query.trim())) {
-    const cat = await mlFetch<{ id: string; name: string; path_from_root?: Array<{ name: string }> }>(token, `/categories/${query.trim()}`);
-    return [{ categoryId: cat.id, categoryName: (cat.path_from_root ?? []).map((p) => p.name).join(" > ") || cat.name }];
+    const cat = await mlFetch<{
+      id: string;
+      name: string;
+      path_from_root?: Array<{ name: string }>;
+    }>(token, `/categories/${query.trim()}`);
+    return [
+      {
+        categoryId: cat.id,
+        categoryName: (cat.path_from_root ?? []).map((p) => p.name).join(" > ") || cat.name,
+      },
+    ];
   }
-  const found = await mlFetch<Array<{ category_id: string; category_name: string; domain_name?: string }>>(
-    token,
-    `/sites/MLB/domain_discovery/search?limit=8&q=${encodeURIComponent(query)}`,
-  );
-  return found.map((f) => ({ categoryId: f.category_id, categoryName: f.domain_name ? `${f.domain_name} · ${f.category_name}` : f.category_name }));
+  const found = await mlFetch<
+    Array<{ category_id: string; category_name: string; domain_name?: string }>
+  >(token, `/sites/MLB/domain_discovery/search?limit=8&q=${encodeURIComponent(query)}`);
+  return found.map((f) => ({
+    categoryId: f.category_id,
+    categoryName: f.domain_name ? `${f.domain_name} · ${f.category_name}` : f.category_name,
+  }));
 }
 
 export async function getCategoryMetadata(userId: string, categoryId: string) {
@@ -427,7 +482,8 @@ async function prepareCandidate(userId: string, listingId: string, spec: MlSpec)
     .get(listingId, userId) as unknown as ListingRow | undefined;
   if (!listing) throw new Error("Falha ao ler o anúncio.");
   if (listing.marketplace !== "mercado_livre") throw new Error("Anúncio não encontrado.");
-  if (listing.external_id) throw new Error(`Este anúncio já existe no Mercado Livre (${listing.external_id}).`);
+  if (listing.external_id)
+    throw new Error(`Este anúncio já existe no Mercado Livre (${listing.external_id}).`);
   if (!spec.categoryId) throw new Error("Escolha a categoria oficial do Mercado Livre.");
 
   const variantCount = (
@@ -436,14 +492,18 @@ async function prepareCandidate(userId: string, listingId: string, spec: MlSpec)
       .get(listing.product_id, userId) as { c: number }
   ).c;
   if (variantCount > 0) {
-    throw new Error("Produtos com variações ainda não podem ser publicados pelo ECOM nesta versão. Seu rascunho foi mantido.");
+    throw new Error(
+      "Produtos com variações ainda não podem ser publicados pelo ECOM nesta versão. Seu rascunho foi mantido.",
+    );
   }
 
   const { token, me } = await ownedConnection(userId);
   const meta = await loadCategoryMetadata(token, spec.categoryId, me);
 
   const images = db
-    .prepare(`SELECT storage_path FROM product_images WHERE product_id = ? AND user_id = ? ORDER BY position`)
+    .prepare(
+      `SELECT storage_path FROM product_images WHERE product_id = ? AND user_id = ? ORDER BY position`,
+    )
     .all(listing.product_id, userId) as Array<{ storage_path: string }>;
   const { appUrl } = mlCredentials();
   const pictures: Array<{ source: string }> = images
@@ -479,10 +539,17 @@ async function prepareCandidate(userId: string, listingId: string, spec: MlSpec)
   // Condicionais oficiais: falha aqui bloqueia (não fingimos sucesso).
   let conditionalIds: string[] = [];
   try {
-    const res = await mlSend<unknown>(token, "POST", `/categories/${meta.categoryId}/attributes/conditional`, payload);
+    const res = await mlSend<unknown>(
+      token,
+      "POST",
+      `/categories/${meta.categoryId}/attributes/conditional`,
+      payload,
+    );
     conditionalIds = parseConditionalIds(res);
   } catch (e) {
-    throw new Error(`Não foi possível consultar os atributos condicionais da categoria. Tente novamente. (${e instanceof Error ? e.message : ""})`);
+    throw new Error(
+      `Não foi possível consultar os atributos condicionais da categoria. Tente novamente. (${e instanceof Error ? e.message : ""})`,
+    );
   }
   if (conditionalIds.length) issues = validateSpec(meta, spec, basic, conditionalIds);
 
@@ -503,9 +570,15 @@ export async function publishListing(params: { userId: string; listingId: string
   const { userId, listingId, spec } = params;
   const db = getDb();
   const c = await prepareCandidate(userId, listingId, spec);
-  if (c.issues.length) throw new Error(`Corrija as pendências antes de publicar: ${c.issues.map((i) => i.message).join(" · ")}`);
+  if (c.issues.length)
+    throw new Error(
+      `Corrija as pendências antes de publicar: ${c.issues.map((i) => i.message).join(" · ")}`,
+    );
   const official = await mlValidateItem(c.token, c.payload);
-  if (official.length) throw new Error(`O Mercado Livre recusou a validação: ${official.map((i) => i.message).join(" · ")}`);
+  if (official.length)
+    throw new Error(
+      `O Mercado Livre recusou a validação: ${official.map((i) => i.message).join(" · ")}`,
+    );
 
   // Trava contra duplo clique/concorrência.
   const staleBefore = new Date(Date.now() - LOCK_STALE_MS).toISOString();
@@ -516,7 +589,8 @@ export async function publishListing(params: { userId: string; listingId: string
        WHERE id = ? AND user_id = ? AND external_id IS NULL AND (status != 'publishing' OR updated_at < ?)
        RETURNING id`,
     )
-    .get(c.meta.categoryId, c.meta.categoryName, listingId, userId, staleBefore) as { id: string } | undefined;
+    .get(c.meta.categoryId, c.meta.categoryName, listingId, userId, staleBefore) as
+    { id: string } | undefined;
   if (!locked) throw new Error("Este anúncio já está sendo publicado ou já foi publicado.");
 
   type Created = { id: string; permalink?: string; status?: string };
@@ -559,7 +633,8 @@ export async function publishListing(params: { userId: string; listingId: string
     userId,
   );
 
-  let warning: string | null = status === "publishing" ? "O Mercado Livre ainda está processando o anúncio." : null;
+  let warning: string | null =
+    status === "publishing" ? "O Mercado Livre ainda está processando o anúncio." : null;
   const description = (c.listing.description ?? "").trim();
   if (description) {
     try {

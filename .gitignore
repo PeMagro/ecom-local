@@ -37,4 +37,7 @@ dist-ssr
 .env.*
 !.env.example
 
+# User-uploaded product images — local runtime content, not source
+/public/uploads/
+
 dev-server.log

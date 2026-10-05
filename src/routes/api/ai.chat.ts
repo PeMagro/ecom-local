@@ -48,10 +48,9 @@ export const Route = createFileRoute("/api/ai/chat")({
       POST: async ({ request }) => {
         const apiKey = process.env["LOVABLE_API_KEY"];
         if (!apiKey) {
-          return Response.json(
-            { error: "Nenhum provedor de IA configurado no servidor." },
-            { status: 503 },
-          );
+          // Mesma mensagem usada por suggestMlSpec (ml-ai.server.ts) pro caso
+          // equivalente — os dois botões "ECO" devem falar a mesma coisa.
+          return Response.json({ error: "A ECO não está disponível no momento." }, { status: 503 });
         }
 
         const userId = await getSessionUserId();
