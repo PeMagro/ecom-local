@@ -223,6 +223,10 @@ CREATE TABLE marketplace_listings (
   stock INTEGER,
   external_id TEXT,
   external_url TEXT,
+  -- Fields specific to `marketplace` that don't belong in a shared column
+  -- (Mercado Livre: condition/listing_type_id/attributes/sale_terms/...;
+  -- each platform's own code reads/writes its own shape here).
+  platform_data TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(platform_data)),
   validation_errors TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(validation_errors)),
   last_error TEXT,
   published_at TEXT,
