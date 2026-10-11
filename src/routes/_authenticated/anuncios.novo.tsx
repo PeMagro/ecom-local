@@ -15,6 +15,7 @@ import {
   upsertListingDraft,
 } from "@/lib/listings.functions";
 import {
+  getAmazonCatalogItem,
   getMarketplaceConnection,
   getMlCategoryMetadata,
   publishListingToMercadoLivre,
@@ -55,10 +56,16 @@ export const Route = createFileRoute("/_authenticated/anuncios/novo")({
   component: NewListingPage,
 });
 
-// Only Mercado Livre actually publishes today. Shopee/Amazon are listed (and
-// selectable in the DB/UI model) but disabled here — turning one on later is
-// "add its section + its publish call", not a redesign of this page.
-const IMPLEMENTED: Partial<Record<MarketplaceChannel, true>> = { mercado_livre: true };
+// Mercado Livre is the only platform that actually publishes today. Amazon
+// has a real section too (busca o item oficial no catálogo sandbox da SP-API
+// para apoiar o preenchimento), mas sem publicação direta ainda — isso exigiria
+// o schema completo de listings por product type da Amazon, não feito aqui.
+// Shopee segue listada (e selecionável no modelo DB/UI) mas desabilitada —
+// turning it on later is "add its section + its publish call".
+const IMPLEMENTED: Partial<Record<MarketplaceChannel, true>> = {
+  mercado_livre: true,
+  amazon: true,
+};
 
 type CoreDraft = {
   productId: string | null;
@@ -131,6 +138,21 @@ function NewListingPage() {
   });
   const mlConnected = mlConnectionQuery.data?.status === "connected";
 
+  const amazonConnectionQuery = useQuery({
+    queryKey: ["marketplace-connection", user?.id, "amazon"],
+    enabled: Boolean(user?.id) && platforms.has("amazon"),
+    queryFn: () => getMarketplaceConnection({ data: { marketplace: "amazon" } }),
+  });
+  const amazonConnected = amazonConnectionQuery.data?.status === "connected";
+
+  // Estado da seção da Amazon: busca o item oficial no catálogo (sandbox da
+  // SP-API) por ASIN para apoiar o preenchimento — sem publicação direta
+  // ainda (ver nota no IMPLEMENTED acima).
+  const [amazonAsin, setAmazonAsin] = useState("");
+  const [amazonSearching, setAmazonSearching] = useState(false);
+  const [amazonItem, setAmazonItem] = useState<Record<string, unknown> | null>(null);
+  const [amazonListingId, setAmazonListingId] = useState<string | null>(null);
+
   // Estado da seção do Mercado Livre: categoria oficial, atributos, validação
   // e publicação via API. Cada plataforma futura teria seu próprio bloco
   // assim, independente deste.
@@ -200,6 +222,9 @@ function NewListingPage() {
     setMlApproved(false);
     setMlListingId(null);
     setMlTouchedAttrs(new Set());
+    setAmazonAsin("");
+    setAmazonItem(null);
+    setAmazonListingId(null);
   }
 
   // Reabre a tela já preenchida quando o produto selecionado já tem um
@@ -224,6 +249,21 @@ function NewListingPage() {
         .catch(() => {
           // Categoria pode ter mudado/sumido do lado do ML — segue sem metadados; o usuário troca a categoria se precisar.
         });
+    }
+  }, [draftsQuery.data]);
+
+  useEffect(() => {
+    const rows = draftsQuery.data;
+    if (!rows) return;
+    const amazonDraft = rows.find((r) => r.marketplace === "amazon" && !r.external_id);
+    if (!amazonDraft) return;
+    setPlatforms((prev) => new Set(prev).add("amazon"));
+    setAmazonListingId(amazonDraft.id);
+    const asin = amazonDraft.platform_data["asin"];
+    if (typeof asin === "string") setAmazonAsin(asin);
+    const catalogItem = amazonDraft.platform_data["catalogItem"];
+    if (catalogItem && typeof catalogItem === "object") {
+      setAmazonItem(catalogItem as Record<string, unknown>);
     }
   }, [draftsQuery.data]);
 
@@ -419,6 +459,76 @@ function NewListingPage() {
     }
   }
 
+  /** Cria/atualiza o rascunho em marketplace_listings para a Amazon. */
+  async function ensureAmazonListingId(): Promise<string | null> {
+    if (!core.productId) {
+      toast.error("Selecione um produto do catálogo.");
+      return null;
+    }
+    const r = await upsertListingDraft({
+      data: {
+        productId: core.productId,
+        marketplace: "amazon",
+        title: core.title,
+        description: core.description,
+        price: parsePrice(core.price),
+        stock: parseStock(core.stock),
+        categoryPath: null,
+        externalCategoryId: null,
+        platformData: { asin: amazonAsin.trim(), catalogItem: amazonItem as unknown as Json },
+      },
+    });
+    setAmazonListingId(r.id);
+    return r.id;
+  }
+
+  /** Busca o item oficial no catálogo (sandbox) pelo ASIN e salva o rascunho. */
+  async function searchAmazonCatalog() {
+    const asin = amazonAsin.trim();
+    if (!asin) {
+      toast.error("Informe o ASIN do produto.");
+      return;
+    }
+    setAmazonSearching(true);
+    try {
+      const r = await getAmazonCatalogItem({ data: { asin } });
+      if (r.message || !r.item) {
+        toast.error(r.message ?? "Falha ao buscar item no catálogo da Amazon.");
+        setAmazonItem(null);
+        return;
+      }
+      setAmazonItem(r.item);
+      toast.success("Item encontrado no catálogo da Amazon.");
+      await ensureAmazonListingId();
+    } finally {
+      setAmazonSearching(false);
+    }
+  }
+
+  /** Copia título/marca sugeridos pelo catálogo oficial para os campos compartilhados. */
+  function applyAmazonSuggestion() {
+    const summaries = amazonItem?.["summaries"];
+    const summary = Array.isArray(summaries) ? (summaries[0] as Record<string, unknown>) : null;
+    if (!summary) return;
+    const itemName = typeof summary["itemName"] === "string" ? summary["itemName"] : null;
+    const brand = typeof summary["brand"] === "string" ? summary["brand"] : null;
+    setCorePatch({
+      title: (itemName ?? core.title).slice(0, 60),
+      description: core.description || [itemName, brand].filter(Boolean).join(" — "),
+    });
+  }
+
+  /** Amazon ainda não publica direto — salva o rascunho com os dados buscados do catálogo. */
+  async function publishAmazonFlow(): Promise<{ ok: boolean; message: string }> {
+    if (!amazonItem) return { ok: false, message: "Busque o item no catálogo antes de publicar." };
+    const id = await ensureAmazonListingId();
+    if (!id) return { ok: false, message: "Selecione um produto." };
+    return {
+      ok: false,
+      message: "Dados do catálogo salvos. Publicação direta na Amazon ainda não está disponível.",
+    };
+  }
+
   /** Valida (se preciso) e publica de fato no Mercado Livre via POST /items. */
   async function publishMlFlow(): Promise<{ ok: boolean; message: string }> {
     if (!mlSpec.categoryId) return { ok: false, message: "Escolha a categoria oficial." };
@@ -454,6 +564,9 @@ function NewListingPage() {
         if (marketplace === "mercado_livre") {
           const r = await publishMlFlow();
           results.push({ marketplace, ...r });
+        } else if (marketplace === "amazon") {
+          const r = await publishAmazonFlow();
+          results.push({ marketplace, ...r });
         } else {
           results.push({
             marketplace,
@@ -482,7 +595,10 @@ function NewListingPage() {
 
   const anyImplementedSelected = Array.from(platforms).some((p) => IMPLEMENTED[p]);
   const publishDisabled =
-    !anyImplementedSelected || mlPublishing || (platforms.has("mercado_livre") && !mlConnected);
+    !anyImplementedSelected ||
+    mlPublishing ||
+    (platforms.has("mercado_livre") && !mlConnected) ||
+    (platforms.has("amazon") && !amazonConnected);
 
   return (
     <PageShell
@@ -527,6 +643,15 @@ function NewListingPage() {
               Integrações
             </Link>{" "}
             para publicar.
+          </p>
+        ) : null}
+        {platforms.has("amazon") && !amazonConnected ? (
+          <p className="rounded-lg border border-border bg-secondary/30 px-4 py-3">
+            Conecte a Amazon na tela{" "}
+            <Link to="/integracoes" className="text-primary underline">
+              Integrações
+            </Link>{" "}
+            para buscar o catálogo oficial.
           </p>
         ) : null}
       </div>
@@ -638,11 +763,29 @@ function NewListingPage() {
         />
       ) : null}
 
+      {platforms.has("amazon") ? (
+        <AmazonCatalogSection
+          asin={amazonAsin}
+          setAsin={setAmazonAsin}
+          item={amazonItem}
+          searching={amazonSearching}
+          connected={amazonConnected}
+          onSearch={searchAmazonCatalog}
+          onApplySuggestion={applyAmazonSuggestion}
+        />
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-end gap-2">
         {mlApproved ? (
           <span className="flex items-center gap-1 text-xs text-primary">
             <CheckCircle2 className="size-3.5" />
             Mercado Livre validado
+          </span>
+        ) : null}
+        {amazonItem ? (
+          <span className="flex items-center gap-1 text-xs text-primary">
+            <CheckCircle2 className="size-3.5" />
+            Catálogo da Amazon encontrado
           </span>
         ) : null}
         {platforms.has("mercado_livre") ? (
@@ -665,6 +808,107 @@ function NewListingPage() {
         </Button>
       </div>
     </PageShell>
+  );
+}
+
+function AmazonCatalogSection({
+  asin,
+  setAsin,
+  item,
+  searching,
+  connected,
+  onSearch,
+  onApplySuggestion,
+}: {
+  asin: string;
+  setAsin: (v: string) => void;
+  item: Record<string, unknown> | null;
+  searching: boolean;
+  connected: boolean;
+  onSearch: () => void;
+  onApplySuggestion: () => void;
+}) {
+  const summaries = item?.["summaries"];
+  const summary = Array.isArray(summaries) ? (summaries[0] as Record<string, unknown>) : null;
+  const itemName =
+    typeof summary?.["itemName"] === "string" ? (summary["itemName"] as string) : null;
+  const brand = typeof summary?.["brand"] === "string" ? (summary["brand"] as string) : null;
+  const classification = summary?.["browseClassification"] as { displayName?: string } | undefined;
+
+  const identifiersBlock = item?.["identifiers"];
+  const identifierRefs = Array.isArray(identifiersBlock)
+    ? ((
+        identifiersBlock[0] as {
+          identifiers?: Array<{ identifierType?: string; identifier?: string }>;
+        }
+      )?.identifiers ?? [])
+    : [];
+
+  const imagesBlock = item?.["images"];
+  const imageCount = Array.isArray(imagesBlock)
+    ? ((imagesBlock[0] as { images?: unknown[] })?.images?.length ?? 0)
+    : 0;
+
+  return (
+    <div className="glass-panel space-y-3 rounded-lg p-5 text-xs">
+      <h2 className="text-sm font-medium">Amazon</h2>
+      <div className="flex gap-2">
+        <Input
+          placeholder="ASIN (ex.: B07N4M94X4)"
+          value={asin}
+          onChange={(e) => setAsin(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onSearch()}
+          disabled={!connected}
+        />
+        <Button size="sm" variant="outline" onClick={onSearch} disabled={!connected || searching}>
+          {searching ? <Loader2 className="size-3.5 animate-spin" /> : "Buscar no catálogo"}
+        </Button>
+      </div>
+      <p className="text-muted-foreground">
+        Busca o item oficial no catálogo da Amazon (sandbox) para apoiar o preenchimento. A
+        publicação direta ainda não está disponível — use os dados abaixo para cadastrar manualmente
+        no Seller Central.
+      </p>
+      {item ? (
+        <div className="space-y-2 rounded-lg border border-border bg-secondary/20 px-4 py-3">
+          {itemName ? (
+            <p>
+              <span className="text-muted-foreground">Título oficial:</span>{" "}
+              <span className="font-medium">{itemName}</span>
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-4">
+            {brand ? (
+              <p>
+                <span className="text-muted-foreground">Marca:</span> {brand}
+              </p>
+            ) : null}
+            {classification?.displayName ? (
+              <p>
+                <span className="text-muted-foreground">Categoria:</span>{" "}
+                {classification.displayName}
+              </p>
+            ) : null}
+            <p>
+              <span className="text-muted-foreground">Imagens oficiais:</span> {imageCount}
+            </p>
+          </div>
+          {identifierRefs.length ? (
+            <p>
+              <span className="text-muted-foreground">Identificadores:</span>{" "}
+              {identifierRefs
+                .map((i) => [i.identifierType, i.identifier].filter(Boolean).join(" "))
+                .join(" · ")}
+            </p>
+          ) : null}
+          {itemName ? (
+            <Button size="sm" variant="outline" onClick={onApplySuggestion}>
+              Usar título sugerido
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

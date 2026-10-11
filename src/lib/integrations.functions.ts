@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { z } from "zod";
 
+import type { AmzJson } from "@/lib/amazon-sp.server";
 import type { MlSpec } from "@/lib/ml-validation";
 import { requireAuth } from "@/lib/sqlite/auth-middleware";
 import type { MarketplaceChannel } from "@/lib/marketplaces";
@@ -44,6 +45,41 @@ export const getMarketplaceConnection = createServerFn({ method: "POST" })
       )
       .get(context.userId, data.marketplace) as unknown as MarketplaceConnectionRow | undefined;
     return row ?? null;
+  });
+
+/**
+ * Conecta a conta Amazon usando o refresh token estático configurado no servidor
+ * (self-authorized para a conta de vendedor da Pedro — sem redirecionamento OAuth).
+ */
+export const connectAmazonAccount = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .handler(async ({ context }) => {
+    const { connectAmazon } = await import("@/lib/amazon-sp.server");
+    try {
+      await connectAmazon(context.userId);
+      return { ok: true as const, message: null as string | null };
+    } catch (e) {
+      return { ok: false as const, message: errText(e, "Falha ao conectar a Amazon.") };
+    }
+  });
+
+/** Busca um item do catálogo oficial da Amazon (sandbox) para apoiar a criação de um anúncio. */
+export const getAmazonCatalogItem = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ asin: z.string().trim().min(1).max(20) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { getCatalogItem } = await import("@/lib/amazon-sp.server");
+    try {
+      const item = await getCatalogItem(context.userId, data.asin);
+      return { item: item as Record<string, AmzJson> | null, message: null as string | null };
+    } catch (e) {
+      return {
+        item: null as Record<string, AmzJson> | null,
+        message: errText(e, "Falha ao buscar item no catálogo da Amazon."),
+      };
+    }
   });
 
 /**
@@ -140,18 +176,16 @@ export const syncMarketplace = createServerFn({ method: "POST" })
     return { synced: orders.length, message: null as string | null };
   });
 
-/** Revoga a conexão local do Mercado Livre do usuário autenticado. */
+/** Revoga a conexão local (ML ou Amazon) do usuário autenticado. */
 export const disconnectMarketplace = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((input: unknown) =>
-    z.object({ marketplace: z.literal("mercado_livre") }).parse(input),
+    z.object({ marketplace: z.enum(["mercado_livre", "amazon"]) }).parse(input),
   )
-  .handler(async ({ context }) => {
+  .handler(async ({ data, context }) => {
     const connection = context.db
-      .prepare(
-        `SELECT id FROM marketplace_connections WHERE user_id = ? AND marketplace = 'mercado_livre'`,
-      )
-      .get(context.userId) as { id: string } | undefined;
+      .prepare(`SELECT id FROM marketplace_connections WHERE user_id = ? AND marketplace = ?`)
+      .get(context.userId, data.marketplace) as { id: string } | undefined;
     if (!connection) return { disconnected: false };
 
     context.db

@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePresentation } from "@/hooks/usePresentation";
 import {
+  connectAmazonAccount,
   disconnectMarketplace,
   getMarketplaceConnection,
   startMarketplaceConnection,
@@ -68,6 +69,11 @@ function IntegrationsPage() {
     queryKey: ["marketplace-connection", user?.id, "mercado_livre"],
     enabled: Boolean(user?.id),
     queryFn: () => getMarketplaceConnection({ data: { marketplace: "mercado_livre" } }),
+  });
+  const amazonConnectionQuery = useQuery({
+    queryKey: ["marketplace-connection", user?.id, "amazon"],
+    enabled: Boolean(user?.id),
+    queryFn: () => getMarketplaceConnection({ data: { marketplace: "amazon" } }),
   });
 
   function handleOAuthResult(result: { status: "sucesso" | "erro"; motivo?: string }) {
@@ -184,6 +190,30 @@ function IntegrationsPage() {
       return;
     }
 
+    if (channel === "amazon") {
+      setConnecting(channel);
+      try {
+        const result = await connectAmazonAccount();
+        if (!result.ok) {
+          toast.error("Não foi possível conectar a Amazon", {
+            description: result.message ?? "Tente novamente.",
+          });
+        } else {
+          toast.success("Amazon conectada", {
+            description: "Token gerado via Selling Partner API (sandbox).",
+          });
+        }
+        await amazonConnectionQuery.refetch();
+      } catch (error) {
+        toast.error("Não foi possível conectar a Amazon", {
+          description: error instanceof Error ? error.message : "Tente novamente.",
+        });
+      } finally {
+        setConnecting(null);
+      }
+      return;
+    }
+
     const state = connectDemo(user.id, undefined, channel);
     if (!state) {
       toast.error("Não foi possível salvar. Verifique o armazenamento do navegador.");
@@ -227,9 +257,9 @@ function IntegrationsPage() {
     const channel = disconnecting;
     setDisconnecting(null);
     try {
-      if (channel === "mercado_livre") {
-        await disconnectMarketplace({ data: { marketplace: "mercado_livre" } });
-        await mlConnectionQuery.refetch();
+      if (channel === "mercado_livre" || channel === "amazon") {
+        await disconnectMarketplace({ data: { marketplace: channel } });
+        await (channel === "mercado_livre" ? mlConnectionQuery : amazonConnectionQuery).refetch();
       } else {
         disconnectDemo(user.id, undefined, channel);
       }
@@ -268,16 +298,20 @@ function IntegrationsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {CHANNELS.map((channel) => {
           const isMercadoLivre = channel.id === "mercado_livre";
-          const liveConnection = isMercadoLivre ? mlConnectionQuery.data : null;
-          const demoConnection = isMercadoLivre
+          const isAmazon = channel.id === "amazon";
+          const isLive = isMercadoLivre || isAmazon;
+          const liveConnection = isMercadoLivre
+            ? mlConnectionQuery.data
+            : isAmazon
+              ? amazonConnectionQuery.data
+              : null;
+          const demoConnection = isLive
             ? undefined
             : channels.find((item) => item.marketplace === channel.id);
-          const connected = isMercadoLivre
+          const connected = isLive
             ? liveConnection?.status === "connected"
             : Boolean(demoConnection);
-          const connectedAt = isMercadoLivre
-            ? liveConnection?.connected_at
-            : demoConnection?.connectedAt;
+          const connectedAt = isLive ? liveConnection?.connected_at : demoConnection?.connectedAt;
 
           return (
             <section key={channel.id} className="glass-panel space-y-4 rounded-xl p-5">
@@ -292,7 +326,7 @@ function IntegrationsPage() {
               </p>
               {connected ? (
                 <>
-                  {isMercadoLivre ? (
+                  {isLive ? (
                     <p className="text-sm">
                       {liveConnection?.account_name ?? `Conta ${liveConnection?.account_id ?? ""}`}{" "}
                       · API oficial
@@ -317,7 +351,11 @@ function IntegrationsPage() {
                       onClick={() =>
                         isMercadoLivre
                           ? void syncMercadoLivre()
-                          : toast.success("Dados de apresentação atualizados")
+                          : isAmazon
+                            ? toast.info(
+                                "Sincronização de pedidos da Amazon ainda não está disponível.",
+                              )
+                            : toast.success("Dados de apresentação atualizados")
                       }
                     >
                       <RefreshCw className="size-3.5" />
@@ -359,8 +397,8 @@ function IntegrationsPage() {
               Desconectar {disconnecting ? CHANNEL_LABEL[disconnecting] : "canal"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {disconnecting === "mercado_livre"
-                ? "A autorização e os tokens do Mercado Livre serão removidos. Será necessário conectar novamente para continuar sincronizando."
+              {disconnecting === "mercado_livre" || disconnecting === "amazon"
+                ? `A autorização e os tokens do ${disconnecting ? CHANNEL_LABEL[disconnecting] : "canal"} serão removidos. Será necessário conectar novamente para continuar sincronizando.`
                 : "Os anúncios e pedidos de apresentação deste canal serão removidos deste navegador. Seu catálogo de produtos será mantido."}
             </AlertDialogDescription>
           </AlertDialogHeader>
