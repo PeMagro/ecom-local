@@ -1,0 +1,160 @@
+===========================================================
+ ECOM — Como baixar, rodar e acessar o site na sua máquina
+===========================================================
+
+Este guia explica como pegar o projeto no GitHub, rodar ele no
+seu computador e gerar um link público pra acessar pelo navegador.
+
+
+-----------------------------------------------------------
+1) PROGRAMAS NECESSÁRIOS (instale antes de tudo)
+-----------------------------------------------------------
+
+a) Git
+   https://git-scm.com/downloads
+   (baixe e instale com as opções padrão)
+
+b) Node.js — versão 22 ou mais recente (recomendado: a versão LTS mais atual)
+   https://nodejs.org/
+   (o instalador já vem com o "npm" junto, não precisa instalar separado)
+
+c) Cloudflare Tunnel (cloudflared) — é o que gera o link público do site
+   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+   (entre no link, escolha "Windows" e baixe o instalador de 64 bits)
+
+Depois de instalar os três, feche e abra o terminal de novo antes de continuar
+(pra ele reconhecer os programas novos).
+
+
+-----------------------------------------------------------
+2) BAIXAR OS ARQUIVOS DO PROJETO
+-----------------------------------------------------------
+
+1. Abra o terminal (pode ser o "Prompt de Comando", "PowerShell" ou
+   "Git Bash", qualquer um serve).
+--> Digite cmd no Pesquisar do Windows
+
+2. Escolha uma pasta onde quer guardar o projeto, por exemplo:
+
+       cd C:\Users\SEU_USUARIO\projects
+
+--> Entre no Explorador de Arquivo, navegue até a pasta C:\Users (Este Computador // Disco C: // Usuários // o nome da pasta diferente de "Público") e crie uma pasta "projects", aí digite o código acima.
+
+3. Baixe o projeto do GitHub:
+       git clone https://github.com/PeMagro/ecom-local.git
+
+4. Entre na pasta que foi criada:
+       cd ecom-local
+
+
+-----------------------------------------------------------
+3) INSTALAR AS DEPENDÊNCIAS DO PROJETO
+-----------------------------------------------------------
+
+Dentro da pasta do projeto (passo anterior), rode:
+
+    npm install
+
+Isso baixa tudo que o projeto precisa pra funcionar. Pode demorar
+alguns minutos na primeira vez.
+
+
+-----------------------------------------------------------
+4) CONFIGURAR O ARQUIVO .env
+-----------------------------------------------------------
+
+O projeto precisa de um arquivo de configuração chamado ".env" que
+NÃO vem pelo GitHub (ele guarda informações sensíveis). Pra criar o seu:
+
+1. Copie o arquivo de exemplo:
+       copy .env.example .env
+   (se estiver no Git Bash, use: cp .env.example .env)
+
+2. Abra o arquivo ".env" num editor de texto (Bloco de Notas mesmo
+   resolve) e preencha o campo SESSION_SECRET. Pra gerar um valor,
+   rode esse comando no terminal e cole o resultado no arquivo:
+       node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+3. Os outros campos (chaves de IA, Mercado Livre, Shopee, Amazon) podem
+   ficar em branco por enquanto — o site funciona normalmente sem eles,
+   só os recursos que dependem de cada um ficam desativados
+   (ex.: sem a chave da IA, o assistente "ECO" avisa que não está
+   disponível, mas o resto do site funciona liso).
+
+4. O campo APP_URL deixe em branco por enquanto — vamos preencher
+   no passo 6, depois de gerar o link público.
+
+
+-----------------------------------------------------------
+5) RODAR O SITE NA SUA MÁQUINA
+-----------------------------------------------------------
+
+Ainda dentro da pasta do projeto, rode:
+
+    npm run dev
+
+Espere aparecer uma mensagem parecida com:
+    Local:   https://localhost:8080/
+
+Deixe esse terminal aberto rodando — é o site funcionando no seu
+computador. Se fechar essa janela, o site para.
+
+(Se o navegador mostrar um aviso de "conexão não seguro" ao tentar
+abrir https://localhost:8080, pode ignorar e continuar — é porque
+o certificado é local, não é um site malicioso.)
+
+
+-----------------------------------------------------------
+6) GERAR O LINK PÚBLICO (pra acessar de outro computador/navegador)
+-----------------------------------------------------------
+
+1. Abra um SEGUNDO terminal (sem fechar o primeiro) e entre na mesma
+   pasta do projeto de novo:
+       cd C:\Users\SEU_USUARIO\projects\ecom-local
+
+2. Rode o comando abaixo pra criar o túnel:
+       cloudflared tunnel --url https://localhost:8080 --no-tls-verify
+
+3. Vai aparecer uma URL parecida com:
+       https://palavras-aleatorias-aqui.trycloudflare.com
+
+   Essa é a URL pública do site. Copie ela.
+
+4. Deixe esse segundo terminal também aberto — se fechar, o link
+   para de funcionar.
+
+5. Volte no arquivo ".env" (passo 4) e preencha o campo APP_URL com
+   essa URL que apareceu, por exemplo:
+       APP_URL="https://palavras-aleatorias-aqui.trycloudflare.com"
+
+6. Feche o primeiro terminal (o do "npm run dev") e rode ele de novo,
+   pra ele carregar essa URL nova:
+       npm run dev
+
+
+-----------------------------------------------------------
+7) ACESSAR O SITE
+-----------------------------------------------------------
+
+Abra a URL que apareceu no passo 6 (a que termina em
+".trycloudflare.com") em qualquer navegador, de qualquer computador
+com internet. O site vai estar funcionando ali.
+
+
+-----------------------------------------------------------
+OBSERVAÇÕES IMPORTANTES
+-----------------------------------------------------------
+
+- Toda vez que você reiniciar o túnel (passo 6), a URL muda. Se isso
+  acontecer, repita o passo 6 inteiro (gerar URL nova, atualizar o
+  .env, reiniciar o "npm run dev").
+
+- Os dois terminais (servidor + túnel) precisam ficar abertos o tempo
+  todo enquanto o site estiver sendo usado. Se fechar o computador ou
+  os terminais, o link para de funcionar.
+
+- Pra atualizar o projeto com as últimas mudanças feitas no GitHub,
+  dentro da pasta do projeto rode:
+      git pull
+  e depois, se algo novo tiver sido adicionado, rode "npm install"
+  de novo antes de "npm run dev".
